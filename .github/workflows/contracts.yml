@@ -1,0 +1,40 @@
+name: contracts
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["contracts/**", ".github/workflows/contracts.yml"]
+  pull_request:
+    paths: ["contracts/**", ".github/workflows/contracts.yml"]
+
+jobs:
+  gate:
+    name: build + test (self-audit gate v2, checks A2 / fuzz)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      # Gate check A2: warnings are build failures, not advisories.
+      # `deny = "warnings"` in foundry.toml covers both solc and forge lint.
+      - name: Build (zero warnings)
+        run: forge build
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      # Fuzz properties run 10,000 cases each; invariants run 256 x 128.
+      # Never run this job under FOUNDRY_PROFILE=lite.
+      - name: Test
+        run: forge test -vvv
+
+      - name: Coverage summary
+        run: forge coverage --report summary --no-match-coverage "(test|script)" || true

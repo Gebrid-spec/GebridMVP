@@ -1,0 +1,59 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+
+# I-P1 / gate v2: the compiler is pinned, never floating.
+solc_version = "0.8.24"
+# ADR-0001: shanghai, not cancun. Keeps MCOPY out of the bytecode so the same
+# artifacts stay deployable on Base, Linea and BNB (phase 2) without a recompile.
+evm_version = "shanghai"
+
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+
+# Gate v2 requires a clean compile. Any warning is a build failure.
+# (forge >= 1.3; the old spelling was `deny_warnings = true`.)
+deny = "warnings"
+
+bytecode_hash = "none"
+cbor_metadata = false
+
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+]
+
+[profile.default.fuzz]
+runs = 10_000
+max_test_rejects = 500_000
+
+[profile.default.invariant]
+runs = 256
+depth = 128
+fail_on_revert = false
+
+# Fast loop for local iteration only. Never used for a gate run.
+[profile.lite.fuzz]
+runs = 256
+
+[profile.lite.invariant]
+runs = 16
+depth = 32
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+
+[rpc_endpoints]
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+base = "${BASE_RPC_URL}"
+
+[etherscan]
+base_sepolia = {key = "${ETHERSCAN_API_KEY}", chain = 84532}
+base = {key = "${ETHERSCAN_API_KEY}", chain = 8453}

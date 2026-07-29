@@ -1,1 +1,15 @@
 node_modules
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/.env
+
+# Secrets — never commit. See SECRETS-REGISTRY.md for the names that must exist.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+keystore/
