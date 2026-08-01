@@ -21,7 +21,7 @@ at `UNLICENSED`).
 | AgentTBA | ✅ `contracts/src/core/AgentTBA.sol` |
 | AgentPermissions (EIP-712 + ERC-1271) | ✅ `contracts/src/core/AgentPermissions.sol` |
 | RiskEngine (composite scoring, contract-level BLOCK, anti-downgrade TADE, NORMAL/RESTRICTED/CRISIS) | ✅ `contracts/src/core/RiskEngine.sol` |
-| solc 0.8.24, zero errors and warnings | ✅ `deny = "warnings"`, verified to actually fail the build |
+| solc 0.8.24, zero errors and warnings | ✅ `deny = "warnings"`, verified to actually fail the build. Toolchain pinned to forge v1.7.1 so the lint set cannot drift (gate check A7) |
 | Foundry tests + adversarial scenarios | ✅ 127 tests: replay, downgrade, privilege expansion, signer substitution, re-entrancy, cross-chain, cross-provider reuse, non-conforming registry |
 | Foundry invariants | ✅ 3 invariants over 32,768 calls |
 | Fuzz ≥ 10k runs on money/rights functions | ✅ 11 fuzz properties at 10,000 runs each |

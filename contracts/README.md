@@ -11,6 +11,18 @@ test/             Unit + adversarial tests; test/invariant/ holds the stateful i
 script/           DeployCore.s.sol — Base Sepolia and mainnet, keys from env only
 ```
 
+## Toolchain
+
+Pinned, and it has to be. `deny = "warnings"` makes `forge lint` part of the build contract, and
+the lint rule set changes between forge releases — 1.7.1 added `block-timestamp` and turned an
+unchanged repository red. Use the same version CI uses:
+
+```bash
+foundryup --install v1.7.1          # must match FOUNDRY_VERSION in .github/workflows/contracts.yml
+```
+
+solc 0.8.24 is pinned in `foundry.toml` and fetched automatically.
+
 ## Running
 
 ```bash
@@ -27,8 +39,9 @@ Two Foundry behaviours cost real debugging time here and are worth knowing befor
    `vm.expectRevert`.** `vm.prank(x); vm.expectRevert(abi.encodeWithSelector(E.selector, c.role()))`
    does not do what it looks like. Hoist every contract read into a local first.
 2. **`vm.setEnv` writes the real process environment and is never rolled back.** `setUp` state is
-   snapshotted, but environment variables are not, so a test that changes one must restore it —
-   see `test/DeployCore.t.sol`.
+   snapshotted, but environment variables are not — and forge runs tests within a contract
+   concurrently, so restoring the variable at the end of a test does not fix it either. Vary
+   configuration through an explicit struct instead; see `test/DeployCore.t.sol`.
 
 ## Deploying
 

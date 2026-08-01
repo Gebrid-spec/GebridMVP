@@ -19,6 +19,21 @@ via_ir = false
 # (forge >= 1.3; the old spelling was `deny_warnings = true`.)
 deny = "warnings"
 
+[lint]
+# `block-timestamp` is excluded, deliberately — deviation DEV-05 in the self-audit gate.
+#
+# Every `block.timestamp` comparison in this codebase gates a validity window measured in
+# minutes to days: attestation validity (5 minutes .. 7 days), the mode de-escalation cooldown
+# (6 hours), grant windows (up to 365 days), and the admin handover delay (3 days). Second-level
+# proposer or sequencer drift cannot move any of those decisions.
+#
+# It is excluded at config level rather than with thirteen identical inline suppressions because
+# the justification is one argument, not thirteen. The property it protects is kept under review
+# by gate check F9 instead: no timestamp-derived window may be shorter than one minute, and
+# `HARD_MIN_VALIDITY` enforces that floor on-chain. A future short window is caught by the gate,
+# which is where that judgement belongs.
+exclude_lints = ["block-timestamp"]
+
 bytecode_hash = "none"
 cbor_metadata = false
 

@@ -26,6 +26,7 @@ the enforcement-path tests in `contracts/test/AgentTBA.t.sol`.
 | E10 durable block record | PASS | `test_BlockEmitsDurableMetricEvent`. |
 | F4 no unbounded loop | PASS | Fixed 8-iteration vector loop. |
 | F7 truncating casts justified | PASS | Byte extraction and the `uint16` score, each with a comment proving the bound. |
+| F9 timestamp windows | ACCEPTED | DEV-05. Shortest window is `minValidity` (default 5 minutes), floored on-chain at `HARD_MIN_VALIDITY = 1 minutes`. Second-level drift cannot move a verdict. |
 
 ## The two design decisions that carry this file
 
@@ -120,6 +121,19 @@ produces a denial of service, not a theft. That is what makes it acceptable to h
 service keys, and it is why the split matters at least as much as the multisig. `DEPLOYMENTS.md`
 now requires the split before mainnet use rather than leaving all four roles on the deploying
 address.
+
+## Revision — 2026-08-01 (second)
+
+CI on forge 1.7.1 raised 13 `block-timestamp` lint warnings, 6 of them in this file, and
+`deny = "warnings"` failed the build. Assessed and accepted as DEV-05: every comparison here gates
+a validity window of minutes to days (attestation validity 5 minutes to a 7-day hard cap,
+de-escalation cooldown 6 hours), so drift of a few seconds cannot change any verdict. The floor is
+enforced on-chain by `HARD_MIN_VALIDITY`, not by convention.
+
+The lint is excluded in `foundry.toml` with the argument written out once, and gate check F9 now
+carries the property. The real defect this exposed was in CI, not here: the toolchain was floating
+while solc was pinned, so a forge release changed the lint set under an unchanged repository. Now
+pinned — gate check A7.
 
 ## Known limitations
 

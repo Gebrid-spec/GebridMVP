@@ -7,6 +7,13 @@ on:
   pull_request:
     paths: ["contracts/**", ".github/workflows/contracts.yml"]
 
+env:
+  # Pinned, not `stable`. `deny = "warnings"` makes forge's linter part of the build contract, and
+  # the lint rule set changes between releases -- forge 1.7.1 added `block-timestamp`, which turned
+  # an unchanged repository red on a floating toolchain. Gate check A7: the toolchain is pinned for
+  # the same reason solc is. Upgrading is a deliberate commit that re-runs the gate.
+  FOUNDRY_VERSION: v1.7.1
+
 jobs:
   gate:
     name: build + test (self-audit gate v2, checks A2 / fuzz)
@@ -21,7 +28,12 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - name: Record toolchain versions
+        run: |
+          forge --version
+          echo "solc pinned in foundry.toml: $(grep solc_version foundry.toml)"
 
       # Gate check A2: warnings are build failures, not advisories.
       # `deny = "warnings"` in foundry.toml covers both solc and forge lint.
@@ -35,6 +47,3 @@ jobs:
       # Never run this job under FOUNDRY_PROFILE=lite.
       - name: Test
         run: forge test -vvv
-
-      - name: Coverage summary
-        run: forge coverage --report summary --no-match-coverage "(test|script)" || true

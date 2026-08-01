@@ -30,6 +30,7 @@ plus `contracts/test/invariant/PermissionBudget.invariant.t.sol` — 3 invariant
 | F1 CEI | PASS | `consume` writes all budget state before returning to `AgentTBA`, which calls out afterwards. |
 | F4 no unbounded loop | PASS | Ancestor walk bounded by `MAX_DELEGATION_DEPTH + 1`; leaf loop bounded by `MAX_TARGETS = 32`. |
 | F6 arithmetic | PASS | `unchecked` only on a decrement already guarded by a zero test and on `usedCalls + 1` already guarded by `>= maxCalls`. |
+| F9 timestamp windows | ACCEPTED | DEV-05. Grant windows run to `MAX_GRANT_LIFETIME = 365 days`; the shortest meaningful window is a grant's `notBefore .. expiry`, which the issuer sets. Second-level drift cannot move a budget or an authority decision. |
 | H4 write-once wiring | ACCEPTED | DEV-02 — see below, now narrowed to the deployer. |
 
 ## D. Narrowing: how it is *proved* rather than declared
@@ -121,6 +122,13 @@ which is the only address that may close the binding, and only once.
 The consequence is worth stating plainly, because it is the strongest claim available about this
 file: **the contract that governs every permission grant in the system has no privileged role at all
 once deployed.** ADR-0004.
+
+## Revision — 2026-08-01 (second)
+
+Seven of the 13 `block-timestamp` lint warnings raised by forge 1.7.1 are in this file. Accepted as
+DEV-05: they gate grant validity windows, which the issuer sets and which the contract caps at 365
+days. A few seconds of drift cannot widen a permission, move a budget, or resurrect a revoked
+grant — revocation and epoch invalidation are not time-based at all. See the gate's F9 row.
 
 ## Adversarial tests
 

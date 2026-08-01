@@ -43,6 +43,7 @@ a named adversarial test is not a `PASS`.
 | A4 | Optimizer settings pinned; `via_ir` state explicit and justified. |
 | A5 | Dependencies pinned to tags/commits, not branches. |
 | A6 | No unused imports, dead code, or unreachable branches. |
+| A7 | The **toolchain** is pinned as tightly as the compiler. `deny = "warnings"` makes the linter part of the build contract, so a floating toolchain means a new release can fail an unchanged repository — or, worse, silently stop reporting something. CI and the local instructions name the same version. |
 
 ## B. Access control and authority
 
@@ -111,6 +112,7 @@ a named adversarial test is not a `PASS`.
 | F6 | Arithmetic overflow/underflow: default checked, `unchecked` blocks individually justified. |
 | F7 | Casts that can truncate are justified in a comment at the cast site. |
 | F8 | Cross-chain execution disabled where account identity is chain-scoped. |
+| F9 | Every decision derived from `block.timestamp` gates a window no shorter than one minute, and the floor is enforced on-chain rather than by convention, so proposer/sequencer drift cannot move it. |
 
 ## G. Standards conformance
 
@@ -142,4 +144,5 @@ Deviations recorded as `ACCEPTED` in any per-file report must also appear here.
 | DEV-01 | all | A2 | `forge lint` emits `asm-keccak256` notes suggesting inline-assembly hashing. Not acted on. | Notes, not warnings; the gate fails on warnings. Readable hashing is worth more than the gas at this stage, and hand-written keccak assembly is a classic source of preimage bugs. |
 | DEV-02 | `AgentPermissions` | H4 | `accountImplementation` is settable once after deployment rather than being a constructor immutable. | Unavoidable constructor cycle (AgentTBA needs AgentPermissions, AgentPermissions needs AgentTBA). Restricted to the immutable `DEPLOYER`, reverts on a second call, asserted by `DeployCore` and by `test_AccountImplementationCannotBeRebound` / `test_Adversarial_OnlyDeployerCanBindTheAccountImplementation`. Until it is set, the contract falls back to a `token()` check. There is no other privileged role on the contract. |
 | DEV-03 | `RiskEngine` | B3 | `CONFIG_ROLE` can retune weights and thresholds, changing which severity vectors produce a BLOCK. | Cannot retroactively downgrade a stored attestation (E1/E2 still hold), cannot disable a mandatory vector (E6), and every change emits an event. `DEPLOYMENTS.md` requires the role behind a timelock before mainnet. |
+| DEV-05 | `AgentPermissions`, `RiskEngine` | F9 / A2 | The `block-timestamp` lint (added in forge 1.7.1) is excluded in `foundry.toml` rather than suppressed at 13 individual sites. | Every one of those comparisons gates a window of minutes to days — attestation validity 5 min .. 7 days, de-escalation cooldown 6 h, grant windows up to 365 days, admin handover 3 days. Second-level drift cannot move any of them. `HARD_MIN_VALIDITY = 1 minutes` enforces the floor on-chain, and gate check F9 keeps the property under review rather than delegating it to a linter. |
 | DEV-04 | `DeployCore` | H3 | The canonical ERC-6551 registry is bound without its bytecode having been verified from the build environment (Base RPC is blocked by egress policy). | Conformance is proved behaviourally at deployment time — a probe address is re-derived from the ERC's creation code and compared with the registry's own `account()` view, and a mismatch aborts. See ADR-0002 and `docs/self-audit/ERC6551Bytecode.md`. |
