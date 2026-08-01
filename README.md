@@ -25,7 +25,7 @@ Five contracts, in dependency order:
 | Contract | Role |
 | --- | --- |
 | `AgentNFT` | Root agent identity. ERC-721 + ERC-4906 + ERC-2981, plus the continuity **epoch** that makes revocation O(1). |
-| `ERC6551Registry` | Deploys token bound accounts with byte-identical ERC-6551 layout. |
+| `ERC6551Registry` | Test and fallback registry. Deployments bind the **canonical** ERC-6551 singleton (ADR-0002). |
 | `AgentTBA` | The agent's account. ERC-6551 execution with permission and risk checks on the path; ERC-1271 signing. |
 | `AgentPermissions` | EIP-712 permission grants with on-chain **subset proofs** — delegation can only narrow. |
 | `RiskEngine` | Composite on-chain scoring, contract-level BLOCK, anti-downgrade TADE, NORMAL / RESTRICTED / CRISIS modes. |
@@ -40,6 +40,11 @@ Three properties are worth knowing before reading the code:
   liveness comes from BLOCK being time-bounded instead.
 - **Selling the agent revokes everything.** Grants pin the NFT's epoch, which advances on transfer,
   burn, and an explicit holder-triggered bump. No loop, nothing to run out of gas.
+- **The permission registry has no admin.** `AgentPermissions` has no owner and no role once
+  deployed; its single write-once binding is consumed during deployment (ADR-0004).
+
+Licensing: source is `UNLICENSED` and `LICENSE` reserves all rights — a deliberate holding position
+while the patent track is open. See `LICENSE` for why not BUSL-1.1 yet.
 
 ## Build and test
 
@@ -48,11 +53,11 @@ Foundry, with `solc` pinned to 0.8.24:
 ```bash
 cd contracts
 forge build          # warnings are build failures
-forge test           # 117 tests; fuzz properties run 10,000 cases each
+forge test           # 127 tests; fuzz properties run 10,000 cases each
 FOUNDRY_PROFILE=lite forge test    # fast loop for local iteration only
 ```
 
-Current state: clean build, **0 warnings**, **117/117 tests passing**, 11 fuzz properties at 10,000
+Current state: clean build, **0 warnings**, **127/127 tests passing**, 11 fuzz properties at 10,000
 runs each, 3 invariants over 32,768 calls.
 
 ## Audit trail
@@ -61,8 +66,8 @@ runs each, 3 invariants over 32,768 calls.
   `GEBRID_SOLIDITY_SELF_AUDIT` v2 was not in the repository (blocker B1).
 - `docs/self-audit/` — one report per file, with findings, adversarial scenarios and known
   limitations.
-- `docs/adr/` — decisions with consequences: compiler and EVM target, registry instance,
-  attestation model.
+- `docs/adr/` — decisions with consequences: compiler and EVM target (0001), registry choice
+  (0002, reversed after review), attestation and block recording (0003), admin model (0004).
 
 Security properties are demonstrated by executing the attack, not by describing it (invariant
 I-P2). Every adversarial claim in the reports names the test that proves it.

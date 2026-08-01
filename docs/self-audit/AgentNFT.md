@@ -15,6 +15,7 @@ Tests: `contracts/test/AgentNFT.t.sol` — 17 tests, 2 fuzz properties at 10,000
 | A6 no dead code | PASS | Clean lint. |
 | B1 authority on mutators | PASS | `mint` MINTER_ROLE, metadata METADATA_ROLE, royalties ROYALTY_ROLE, `burn` owner/approved, `advanceEpoch` holder/approved. |
 | B3 admin blast radius | PASS | Enumerated below. |
+| B5 two-step admin transfer | PASS | `AccessControlDefaultAdminRules`; ADR-0004. `test_AdminHandoverRequiresTheDelayAndAcceptance`, `test_PendingAdminHandoverCanBeCancelled`. |
 | B6 holder-reachable emergency power | PASS | `advanceEpoch` is callable by the **token holder**, not by a protocol admin — `test_HolderCanAdvanceEpochAsKillSwitch`. Revocation must not depend on GEBRID being reachable or willing. |
 | D7 O(1) invalidation on transfer/burn | PASS | `_update` advances the epoch on every mint, transfer and burn — `test_EpochAdvancesOnMintTransferAndBurn`, and downstream in `AgentPermissions.t.sol::test_TransferOfTheAgentKillsEveryGrant`. |
 | F6 arithmetic | PASS | Two `unchecked` blocks: the epoch increment (one per transfer; `uint64` cannot realistically wrap) and the token-id counter. Both commented. |
@@ -63,7 +64,7 @@ per-token URI and resets the per-token royalty on burn —
 
 | Role | Can do | Cannot do |
 | --- | --- | --- |
-| `DEFAULT_ADMIN_ROLE` | Grant/revoke all roles. | Move, burn, or freeze a token it does not hold. |
+| `DEFAULT_ADMIN_ROLE` | Grant/revoke the other roles; begin a delayed handover of itself. | Move, burn or freeze a token it does not hold; grant `DEFAULT_ADMIN_ROLE` directly; advance an agent's epoch. |
 | `MINTER_ROLE` | Mint new agents. | Affect existing agents. |
 | `METADATA_ROLE` | Set base URI and per-token URI. | Affect ownership, epochs, or permissions. |
 | `ROYALTY_ROLE` | Set royalties up to 10%. | Exceed `MAX_ROYALTY_BPS`. |
@@ -71,9 +72,21 @@ per-token URI and resets the per-token royalty on burn —
 No role can advance an agent's epoch, revoke its permissions, or move it. The kill switch belongs
 to the holder alone.
 
+## Revision — 2026-08-01
+
+`AccessControl` replaced with `AccessControlDefaultAdminRules` (ADR-0004). The earlier version of
+this report listed single-step admin transfer as a known limitation to be handled operationally by
+using a multisig. That was too weak: `DEFAULT_ADMIN_ROLE` can now not be granted directly at all,
+and a handover is begin/accept with an enforced delay, leaving the attempt visible on-chain long
+enough to cancel. The multisig requirement still stands in `DEPLOYMENTS.md`; it is now a second
+layer rather than the only one.
+
+The constructor gained `adminTransferDelay`. The contract also now exposes `owner()` via `IERC5313`,
+returning the default admin — incidental, and read by marketplaces for collection ownership.
+
 ## Known limitations
 
-- `DEFAULT_ADMIN_ROLE` is single-step (`AccessControl`, not `AccessControlDefaultAdminRules`).
-  For mainnet this address must be a multisig; recorded as a deployment requirement in
-  `DEPLOYMENTS.md` rather than solved in code.
+- Losing the admin key with no pending transfer makes the role unrecoverable. That is the trade for
+  removing single-step transfer, and it is why the holder-side kill switch (`advanceEpoch`)
+  deliberately depends on no admin at all.
 - `mint` has no supply cap. Deliberate — agent identities are not a scarce collectible.

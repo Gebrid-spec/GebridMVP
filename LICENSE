@@ -1,0 +1,35 @@
+# LICENSE
+
+Copyright (c) 2026 Gebrid Foundation. All rights reserved.
+
+**No licence is granted.** This repository is published for review, evidence of reduction to
+practice, and audit. It is not open source. No permission is given to use, copy, modify, merge,
+publish, distribute, sublicense, or sell any part of it, and no patent rights are granted or
+implied.
+
+Patent pending.
+
+## Why `UNLICENSED` and not BUSL-1.1
+
+Source files carry the SPDX identifier `UNLICENSED`. An earlier revision used `BUSL-1.1`; that was
+reverted deliberately, for two reasons worth recording:
+
+1. **A bare `BUSL-1.1` tag is not a licence.** The Business Source Licence only takes effect once
+   its parameters are filled in — Licensor, Change Date, Change License, Additional Use Grant. An
+   SPDX identifier with no accompanying licence text grants nothing while looking as though it
+   grants something, which is the worst of both.
+
+2. **BUSL's Change Licence is a forward patent grant.** The conventional choice, Apache-2.0,
+   carries an express patent licence. Adopting BUSL in its default shape therefore schedules an
+   automatic licence to this project's patents on the Change Date. With the patent track still open
+   (non-provisional due 13.04.2027), that is a decision for counsel, not a default.
+
+`UNLICENSED` grants nothing, is accepted by Basescan for source verification, and is reversible in
+one commit once the licensing decision is made.
+
+## To revisit
+
+- Choose the final licence with counsel once the patent position is settled. If BUSL-1.1 is chosen,
+  fill in all four parameters and state the Change Licence explicitly.
+- Snap and SDK components intended for public distribution may need a different, more permissive
+  licence than the contracts. Decide per directory rather than repository-wide.

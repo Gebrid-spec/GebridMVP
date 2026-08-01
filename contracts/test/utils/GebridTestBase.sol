@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
@@ -30,6 +30,9 @@ abstract contract GebridTestBase is Test {
     address internal attacker;
     uint256 internal attackerKey;
 
+    /// @dev Delay on a DEFAULT_ADMIN_ROLE handover; matches the deploy script default.
+    uint48 internal constant ADMIN_TRANSFER_DELAY = 3 days;
+
     uint256 private _nonceCounter;
 
     function setUp() public virtual {
@@ -40,13 +43,13 @@ abstract contract GebridTestBase is Test {
         (delegate, delegateKey) = makeAddrAndKey("delegate");
         (attacker, attackerKey) = makeAddrAndKey("attacker");
 
-        nft = new AgentNFT("GEBRID Agent", "AGENT", admin);
+        nft = new AgentNFT("GEBRID Agent", "AGENT", admin, ADMIN_TRANSFER_DELAY);
         registry = new ERC6551Registry();
-        risk = new RiskEngine(admin);
-        perms = new AgentPermissions(IAgentNFT(address(nft)), IERC6551Registry(address(registry)), admin);
+        risk = new RiskEngine(admin, ADMIN_TRANSFER_DELAY);
+        perms = new AgentPermissions(IAgentNFT(address(nft)), IERC6551Registry(address(registry)));
         accountImpl = new AgentTBA(IAgentPermissions(address(perms)), IRiskEngine(address(risk)));
 
-        vm.prank(admin);
+        // The test contract is the deployer, so it is the one that may close the binding.
         perms.setAccountImplementation(address(accountImpl));
     }
 

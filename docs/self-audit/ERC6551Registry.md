@@ -14,7 +14,7 @@ Tests: `contracts/test/ERC6551Registry.t.sol` — 10 tests, 3 fuzz properties at
 | F4 no unbounded loop | PASS (by construction) | No loops. |
 | F5 low-level call checked | PASS | `create2` result checked against `address(0)`; reverts `AccountCreationFailed`. |
 | G1 interface ids | PASS | `test_InterfaceIdsMatchERC6551` asserts `IERC6551Account == 0x6faff5f1` and `IERC6551Executable == 0x51945447` against the values fixed by the ERC. |
-| G3 documented deviation | ACCEPTED | Own registry instance, not the canonical singleton — ADR-0002. |
+| G3 documented deviation | PASS | ADR-0002 now binds the canonical singleton; this contract is the test/fallback instance. |
 | G4 standard events | PASS | `ERC6551AccountCreated` with the ERC's exact signature — `test_CreateAccountEmitsSpecEvent`. |
 | H2 deploy script tested | PASS | `test/DeployCore.t.sol`. |
 
@@ -59,12 +59,29 @@ address.
 | Same token, different salt | `test_SaltSeparatesAccounts` | Distinct accounts. |
 | Footer misparse for arbitrary inputs | `testFuzz_FooterRoundTrip` (10,000 runs) | Exact round-trip. |
 
+## Revision — 2026-08-01
+
+ADR-0002 was reversed by the owner: deployments now bind the **canonical ERC-6551 singleton** at
+`0x000000006551c19487814612e58FE06813775758`, not this contract. This file remains for local and CI
+testing and as an explicit fallback for chains without the singleton.
+
+The byte-layout logic moved to `src/libraries/ERC6551Bytecode.sol` so that `DeployCore` can use the
+same derivation to *verify* a registry it did not deploy —
+`test_Adversarial_NonConformingRegistryAtCanonicalAddressAborts` etches a look-alike that answers
+`account(...)` with a plausible but wrong address, and the deployment aborts.
+
+This could not be verified against the live chains from the build environment: Base RPC endpoints
+are blocked by the egress policy, so no `eth_getCode` against the singleton was possible. That is
+precisely why the check is behavioural and runs at deployment time, rather than a hardcoded code
+hash committed on the strength of recollection.
+
 ## Known limitations
 
 - **`implementation` is not checked for code.** The ERC does not require it, and adding the check
   would diverge from the reference behaviour. A caller that passes a codeless implementation gets
   an account whose calls all fail — self-inflicted, and it grants nothing to anyone.
-- **Not the canonical singleton.** Accounts created here have different addresses from the same
-  tuple created through `0x000000006551c19487814612e58FE06813775758`, because CREATE2 mixes in the
-  deployer. The account *bytecode* is byte-identical, so 6551-aware tooling reads them correctly.
-  Rationale and the cost of switching are in ADR-0002. This is an owner decision before mainnet.
+- **Accounts created here are not discoverable.** CREATE2 mixes in the deployer, so accounts from
+  this instance sit at different addresses than the same tuple through the singleton. The account
+  *bytecode* is byte-identical, so anything reading an account directly still works, but
+  registry-event indexers will not find them. `DeployCore` reports and records any such deployment
+  as non-canonical, so a deployment record cannot quietly claim otherwise.

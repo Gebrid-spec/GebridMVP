@@ -11,7 +11,8 @@ the enforcement-path tests in `contracts/test/AgentTBA.t.sol`.
 | --- | --- | --- |
 | A1–A6 build | PASS | Zero warnings. Two truncating casts carry justification comments at the cast site (F7). |
 | B1 authority | PASS | `submitAttestation` ATTESTER_ROLE; mode escalation GUARDIAN_ROLE; de-escalation DEFAULT_ADMIN_ROLE + cooldown; tuning CONFIG_ROLE. |
-| B3 blast radius | ACCEPTED | DEV-03 — see below. |
+| B3 blast radius | ACCEPTED | DEV-03 — see below. Roles split per ADR-0004. |
+| B5 two-step admin transfer | PASS | `AccessControlDefaultAdminRules`; `test_AdminRoleCannotBeGrantedDirectly`. |
 | C8 unambiguous preimages | PASS | Subjects use `abi.encode`, never `encodePacked`. |
 | E1 no verdict downgrade in window | PASS | `test_Adversarial_BlockCannotBeDowngradedToClear`, `test_Adversarial_BlockCannotBeDowngradedToWarn`. |
 | E2 no window shortening | PASS | `test_Adversarial_BlockWindowCannotBeShortened`. |
@@ -105,6 +106,20 @@ configuration: `test_RevertWhen_WeightsDoNotSumToScale`.
 | Mode | Non-guardian escalates | `test_RevertWhen_NonGuardianEscalates` |
 | Mode | Premature de-escalation | `test_EscalationIsImmediate_DeEscalationIsDelayed` |
 | Denylist | Denylisted target with a live CLEAR attestation | `test_DenylistBlocksRegardlessOfAttestation` |
+
+## Revision — 2026-08-01
+
+`AccessControl` replaced with `AccessControlDefaultAdminRules` (ADR-0004): `DEFAULT_ADMIN_ROLE`
+cannot be granted directly, and a handover is begin/accept with a delay. Constructor gained
+`adminTransferDelay`.
+
+More consequential than the mechanism is what it makes explicit about the role split. Because the
+enforcement design is asymmetric — GUARDIAN can only *escalate* the mode, ATTESTER can only *raise*
+severities, and no role can weaken a stored attestation — a compromise of either of those two keys
+produces a denial of service, not a theft. That is what makes it acceptable to hold them as hot
+service keys, and it is why the split matters at least as much as the multisig. `DEPLOYMENTS.md`
+now requires the split before mainnet use rather than leaving all four roles on the deploying
+address.
 
 ## Known limitations
 

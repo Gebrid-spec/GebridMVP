@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
 import {AgentPermissions} from "../src/core/AgentPermissions.sol";
@@ -140,7 +140,7 @@ contract AgentPermissionsTest is GebridTestBase {
     /// @dev Isolates layer 2 from layer 1: with the account-derivation gate not yet armed, the
     ///      signature alone must still fail to replay onto another chain.
     function test_Adversarial_SignatureAloneIsChainBound() public {
-        AgentPermissions fresh = new AgentPermissions(nft, registry, admin); // implementation unset
+        AgentPermissions fresh = new AgentPermissions(nft, registry); // implementation unset
         AgentPermissions.PermissionSet memory p = _basePermissionSet(account, tokenId, delegate);
         bytes32[] memory leaves = _leaves(address(callTarget), PING);
         p.targetsRoot = _root(leaves);
@@ -162,8 +162,7 @@ contract AgentPermissionsTest is GebridTestBase {
         p.targetsRoot = _root(leaves);
         bytes memory signature = _sign(holderKey, perms.grantIdOf(p));
 
-        AgentPermissions other = new AgentPermissions(nft, registry, admin);
-        vm.prank(admin);
+        AgentPermissions other = new AgentPermissions(nft, registry);
         other.setAccountImplementation(address(accountImpl));
 
         assertTrue(other.domainSeparator() != perms.domainSeparator(), "domains must differ");
@@ -546,9 +545,22 @@ contract AgentPermissionsTest is GebridTestBase {
     }
 
     function test_RevertWhen_AccountImplementationSetTwice() public {
-        vm.prank(admin);
         vm.expectRevert(AgentPermissions.ImplementationAlreadySet.selector);
         perms.setAccountImplementation(address(0xBEEF));
+    }
+
+    /// @dev The binding is the one mutable step in the deployment, so only the deployer may close
+    ///      it — and only once. Nobody else can point the account-derivation check anywhere.
+    function test_Adversarial_OnlyDeployerCanBindTheAccountImplementation() public {
+        AgentPermissions fresh = new AgentPermissions(nft, registry);
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(AgentPermissions.NotDeployer.selector, attacker, address(this)));
+        fresh.setAccountImplementation(address(accountImpl));
+
+        // The deployer can, exactly once.
+        fresh.setAccountImplementation(address(accountImpl));
+        assertEq(fresh.accountImplementation(), address(accountImpl));
     }
 
     // --------------------------------------------------------------------------------------

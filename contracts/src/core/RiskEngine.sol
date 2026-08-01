@@ -1,7 +1,9 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {
+    AccessControlDefaultAdminRules
+} from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 
 import {IRiskEngine} from "../interfaces/IRiskEngine.sol";
 
@@ -27,7 +29,7 @@ import {IRiskEngine} from "../interfaces/IRiskEngine.sol";
 ///      An event emitted on the blocked path would be rolled back with the transaction and could
 ///      never back a public "prevented $X" figure. The durable record is `RiskBlocked`, emitted
 ///      when the BLOCK attestation is stored, carrying the value at risk.
-contract RiskEngine is IRiskEngine, AccessControl {
+contract RiskEngine is IRiskEngine, AccessControlDefaultAdminRules {
     // --------------------------------------------------------------------------------------
     // Types
     // --------------------------------------------------------------------------------------
@@ -140,7 +142,6 @@ contract RiskEngine is IRiskEngine, AccessControl {
     // Errors
     // --------------------------------------------------------------------------------------
 
-    error ZeroAddress();
     error InvalidSeverity(uint256 vectorIndex, uint256 severity);
     error InvalidValidity(uint64 requested, uint64 min, uint64 max);
     error InvalidThresholds(uint16 warnBps, uint16 blockBps);
@@ -160,9 +161,15 @@ contract RiskEngine is IRiskEngine, AccessControl {
     // Construction
     // --------------------------------------------------------------------------------------
 
-    constructor(address admin) {
-        if (admin == address(0)) revert ZeroAddress();
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    /// @param adminTransferDelay Delay enforced on a `DEFAULT_ADMIN_ROLE` handover. The role
+    ///        cannot be granted or revoked directly — only transferred through the begin/accept
+    ///        pair, after this delay.
+    /// @dev The other three roles are granted to `admin` here only as a bootstrap. The deployment
+    ///      runbook (`DEPLOYMENTS.md`) requires them to be split before mainnet use: GUARDIAN and
+    ///      ATTESTER can go to hot service keys because neither can weaken a verdict — GUARDIAN can
+    ///      only escalate the mode, ATTESTER can only raise severities. CONFIG belongs behind a
+    ///      timelock (deviation DEV-03).
+    constructor(address admin, uint48 adminTransferDelay) AccessControlDefaultAdminRules(adminTransferDelay, admin) {
         _grantRole(GUARDIAN_ROLE, admin);
         _grantRole(CONFIG_ROLE, admin);
         _grantRole(ATTESTER_ROLE, admin);

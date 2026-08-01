@@ -1,10 +1,8 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 import {IAgentNFT} from "../interfaces/IAgentNFT.sol";
 import {IAgentPermissions} from "../interfaces/IAgentPermissions.sol";
@@ -33,7 +31,7 @@ import {CanonicalMerkle} from "../libraries/CanonicalMerkle.sol";
 ///      **Transfer of the NFT kills everything.** Grants pin `agentEpoch`. AgentNFT advances that
 ///      counter on mint, transfer, burn and explicit bump, so a sale of the agent invalidates
 ///      every outstanding grant in O(1) with no migration step and no loop to run out of gas.
-contract AgentPermissions is IAgentPermissions, EIP712, Ownable2Step {
+contract AgentPermissions is IAgentPermissions, EIP712 {
     // --------------------------------------------------------------------------------------
     // Types
     // --------------------------------------------------------------------------------------
@@ -115,6 +113,14 @@ contract AgentPermissions is IAgentPermissions, EIP712, Ownable2Step {
     IAgentNFT public immutable AGENT_NFT;
     IERC6551Registry public immutable REGISTRY;
 
+    /// @notice The address that deployed this contract; the only one that may close the
+    ///         `accountImplementation` binding, and only once.
+    /// @dev Deliberately not an `Ownable` owner. The sole privilege this contract has ever needed
+    ///      is that one write-once setter, which the deployment consumes immediately. Keeping a
+    ///      transferable owner afterwards would leave a live privileged role with nothing to do —
+    ///      an access-control surface that can only ever be a liability.
+    address public immutable DEPLOYER;
+
     // --------------------------------------------------------------------------------------
     // Storage
     // --------------------------------------------------------------------------------------
@@ -182,6 +188,7 @@ contract AgentPermissions is IAgentPermissions, EIP712, Ownable2Step {
     error NotAuthority(address caller, address authority);
     error InvalidAuthoritySignature(address authority);
     error ImplementationAlreadySet();
+    error NotDeployer(address caller, address deployer);
     error NoActiveGrant(address account, address delegate);
     error AccountMismatch(address expected, address actual);
     error TargetNotPermitted(address target, bytes4 selector);
@@ -199,23 +206,23 @@ contract AgentPermissions is IAgentPermissions, EIP712, Ownable2Step {
     // Construction
     // --------------------------------------------------------------------------------------
 
-    constructor(IAgentNFT agentNft, IERC6551Registry registry, address owner_)
-        EIP712("GEBRID.AgentPermissions", "1")
-        Ownable(owner_)
-    {
+    constructor(IAgentNFT agentNft, IERC6551Registry registry) EIP712("GEBRID.AgentPermissions", "1") {
         if (address(agentNft) == address(0) || address(registry) == address(0)) {
             revert ZeroAddress();
         }
         AGENT_NFT = agentNft;
         REGISTRY = registry;
+        DEPLOYER = msg.sender;
     }
 
     /// @notice Binds the AgentTBA implementation used to re-derive account addresses.
-    /// @dev Write-once. AgentTBA takes this contract as a constructor immutable and this contract
-    ///      needs AgentTBA's address, so one side of the cycle has to be closed after deployment.
-    ///      Closing it here — rather than making AgentTBA's dependencies mutable — keeps the
-    ///      enforcement path immutable, which is the side that matters.
-    function setAccountImplementation(address implementation) external onlyOwner {
+    /// @dev Write-once, and callable only by the deployer. AgentTBA takes this contract as a
+    ///      constructor immutable and this contract needs AgentTBA's address, so one side of the
+    ///      cycle has to be closed after deployment. Closing it here — rather than making
+    ///      AgentTBA's dependencies mutable — keeps the enforcement path immutable, which is the
+    ///      side that matters. After this call the contract has no privileged role at all.
+    function setAccountImplementation(address implementation) external {
+        if (msg.sender != DEPLOYER) revert NotDeployer(msg.sender, DEPLOYER);
         if (implementation == address(0)) revert ZeroAddress();
         if (accountImplementation != address(0)) revert ImplementationAlreadySet();
         accountImplementation = implementation;

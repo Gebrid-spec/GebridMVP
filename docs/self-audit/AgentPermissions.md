@@ -14,7 +14,7 @@ plus `contracts/test/invariant/PermissionBudget.invariant.t.sol` — 3 invariant
 | B1 authority on mutators | PASS | `grant` requires the authority's signature; `consume` requires `msg.sender` to be the agent account; `revoke` requires holder, delegate, or parent delegate. |
 | B2 no authority inflation | PASS | Section D below. |
 | B4 setters cannot retroactively widen | PASS | `setAccountImplementation` is write-once; no setter touches an issued grant. |
-| B5 two-step ownership | PASS | `Ownable2Step`. |
+| B5 privileged roles | PASS (by construction) | **None.** The one write-once binding is restricted to the immutable `DEPLOYER` and is consumed during deployment; there is no owner and no role afterwards. ADR-0004. |
 | C1 EIP-712 domain | PASS | name, version, `chainId`, `verifyingContract` via OZ `EIP712`. |
 | C2 fork safety | PASS | OZ recomputes the separator when `chainId` changes — `test_Adversarial_SignatureDoesNotReplayAcrossChains` asserts the separator actually moves. |
 | C3 every enforced field is signed | PASS | All 14 struct fields are in `PERMISSION_SET_TYPEHASH`; `testFuzz_MutatingASignedFieldInvalidatesTheSignature` (10,000 runs) mutates each in turn. |
@@ -30,7 +30,7 @@ plus `contracts/test/invariant/PermissionBudget.invariant.t.sol` — 3 invariant
 | F1 CEI | PASS | `consume` writes all budget state before returning to `AgentTBA`, which calls out afterwards. |
 | F4 no unbounded loop | PASS | Ancestor walk bounded by `MAX_DELEGATION_DEPTH + 1`; leaf loop bounded by `MAX_TARGETS = 32`. |
 | F6 arithmetic | PASS | `unchecked` only on a decrement already guarded by a zero test and on `usedCalls + 1` already guarded by `>= maxCalls`. |
-| H4 write-once wiring | ACCEPTED | DEV-02 — see below. |
+| H4 write-once wiring | ACCEPTED | DEV-02 — see below, now narrowed to the deployer. |
 
 ## D. Narrowing: how it is *proved* rather than declared
 
@@ -109,6 +109,19 @@ leaked delegate key: `test_RevertWhen_GrantLifetimeExceedsCap`.
 bit-identical to a single `abi.encode` — this is a compilation workaround, not an encoding change.
 Likewise `_emitGrantIssued` exists only to assemble nine event arguments in a shallow frame.
 
+## Revision — 2026-08-01
+
+**`Ownable2Step` removed entirely.** The owner of this contract had exactly one power,
+`setAccountImplementation`, which the deployment consumes immediately; after that it could do
+nothing. A live, transferable privileged role with no remaining function is not neutral — it is an
+access-control surface that can only ever be a liability, and every future reader has to work out
+for themselves that it is inert. It is replaced by an immutable `DEPLOYER` recorded at construction,
+which is the only address that may close the binding, and only once.
+
+The consequence is worth stating plainly, because it is the strongest claim available about this
+file: **the contract that governs every permission grant in the system has no privileged role at all
+once deployed.** ADR-0004.
+
 ## Adversarial tests
 
 | Class | Scenario | Test |
@@ -130,6 +143,7 @@ Likewise `_emitGrantIssued` exists only to assemble nine event arguments in a sh
 | Encoding | Unsorted / duplicate leaves | `test_Adversarial_UnsortedLeavesAreRejected`, `test_Adversarial_DuplicateLeavesAreRejected` |
 | Encoding | Leaf set that does not reproduce the signed root | `test_Adversarial_LeafSetMustReproduceTheSignedRoot` |
 | Revocation | Stranger revokes | `test_RevertWhen_StrangerRevokes` |
+| Wiring | Non-deployer binds the account implementation | `test_Adversarial_OnlyDeployerCanBindTheAccountImplementation` |
 
 ## Known limitations
 
@@ -142,6 +156,8 @@ Likewise `_emitGrantIssued` exists only to assemble nine event arguments in a sh
   nonce space. Intentional (it matches how a signer thinks about its own outbound signatures) but
   worth knowing when building the SDK.
 - **DEV-02:** `accountImplementation` is set once after deployment because AgentTBA and
-  AgentPermissions reference each other in their constructors. `onlyOwner`, reverts on a second
-  call, asserted by the deploy script and by `test_AccountImplementationCannotBeRebound`. Before it
-  is set, the contract falls back to checking `token()` directly.
+  AgentPermissions reference each other in their constructors. Restricted to the immutable
+  `DEPLOYER`, reverts on a second call, asserted by the deploy script and by
+  `test_AccountImplementationCannotBeRebound` and
+  `test_Adversarial_OnlyDeployerCanBindTheAccountImplementation`. Before it is set, the contract
+  falls back to checking `token()` directly.

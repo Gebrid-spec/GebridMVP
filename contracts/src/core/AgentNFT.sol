@@ -1,10 +1,12 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {
+    AccessControlDefaultAdminRules
+} from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -19,7 +21,7 @@ import {IAgentNFT} from "../interfaces/IAgentNFT.sol";
 ///      moves. `agentEpoch` is how: it advances on mint, on every transfer, on burn, and on an
 ///      explicit owner bump, and grants pin the epoch they were issued under. Invalidation is
 ///      therefore O(1) and cannot be skipped by an unbounded-loop gas failure.
-contract AgentNFT is ERC721, ERC721Burnable, ERC2981, AccessControl, IERC4906, IAgentNFT {
+contract AgentNFT is ERC721, ERC721Burnable, ERC2981, AccessControlDefaultAdminRules, IERC4906, IAgentNFT {
     using Strings for uint256;
 
     bytes32 public constant MINTER_ROLE = keccak256("GEBRID.AgentNFT.MINTER_ROLE");
@@ -47,11 +49,16 @@ contract AgentNFT is ERC721, ERC721Burnable, ERC2981, AccessControl, IERC4906, I
     event BaseURIUpdated(string baseURI);
 
     error RoyaltyTooHigh(uint96 requestedBps, uint96 maxBps);
-    error ZeroAddress();
 
-    constructor(string memory name_, string memory symbol_, address admin) ERC721(name_, symbol_) {
-        if (admin == address(0)) revert ZeroAddress();
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    /// @param adminTransferDelay Delay enforced on a `DEFAULT_ADMIN_ROLE` handover. The role
+    ///        cannot be granted or revoked directly at all — only transferred through the
+    ///        begin/accept pair, and only after this delay. A stolen or mistakenly-sent admin
+    ///        transfer is therefore visible on-chain long enough to be cancelled.
+    constructor(string memory name_, string memory symbol_, address admin, uint48 adminTransferDelay)
+        ERC721(name_, symbol_)
+        AccessControlDefaultAdminRules(adminTransferDelay, admin)
+    {
+        // The parent constructor already rejects a zero admin and granted DEFAULT_ADMIN_ROLE.
         _grantRole(MINTER_ROLE, admin);
         _grantRole(METADATA_ROLE, admin);
         _grantRole(ROYALTY_ROLE, admin);
@@ -180,7 +187,7 @@ contract AgentNFT is ERC721, ERC721Burnable, ERC2981, AccessControl, IERC4906, I
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721, ERC2981, AccessControl, IERC165)
+        override(ERC721, ERC2981, AccessControlDefaultAdminRules, IERC165)
         returns (bool)
     {
         return interfaceId == _INTERFACE_ID_ERC4906 || super.supportsInterface(interfaceId);

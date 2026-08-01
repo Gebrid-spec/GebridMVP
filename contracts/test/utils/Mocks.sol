@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
@@ -122,5 +122,18 @@ contract ReentrantMinter {
             ok; // outcome is asserted by the test through token ownership, not here
         }
         return this.onERC721Received.selector;
+    }
+}
+
+/// @notice A contract that answers `account(...)` but derives addresses incorrectly. Stands in for
+///         a wrong address, a proxy, or a look-alike registry sitting where the canonical ERC-6551
+///         singleton is expected.
+contract NonConformingRegistry {
+    function account(address, bytes32, uint256, address, uint256) external view returns (address) {
+        return address(this); // plausible-looking, and wrong
+    }
+
+    function createAccount(address, bytes32, uint256, address, uint256) external view returns (address) {
+        return address(this);
     }
 }
