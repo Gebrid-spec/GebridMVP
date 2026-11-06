@@ -6,6 +6,9 @@ A single self-contained HTML page that runs the full prototype in the viewer's b
   policy engine, approvals, policy change control, snapshots, migrations, workflows and HMAC-chained audit.
   State is kept per viewer in `localStorage`; nothing leaves the browser.
 - `build.cjs` — bundles `frontend/` (unchanged UI) with `backend.js` into one page.
+- `i18n.js` — Russian interface: translates rendered text after the UI draws it, so logic stays untouched. The language follows
+  the browser and can be switched with the Русский / English button; system identifiers stay in Latin.
+- `i18n_check.cjs` — checks that every backend message translates, alone and inside composite messages.
 - `parity.cjs` — runs one 122-step scenario against the Python server and the JS backend and compares every
   response (status plus behaviour-bearing fields). Keep it green whenever `gebrid/` changes.
 

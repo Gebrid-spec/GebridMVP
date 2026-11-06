@@ -10,6 +10,8 @@ const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 let app = read('frontend/app.js');
 let css = read('frontend/styles.css');
 const backend = read('browser-demo/backend.js');
+const i18n = read('browser-demo/i18n.js');
+const TOUR = `<div class="tour"><div class="tour-title">Five-minute walkthrough</div><ol><li><b>Agent Operator</b> → Invoice Control Lab → submit all five invoices. One drafts, one waits for approval, three are blocked.</li><li><b>Finance Approver</b> → Approvals → approve INV-1002. Policy, tool and budget are rechecked first.</li><li><b>Security Admin</b> → Agent Firewall → raise the approval threshold. The change waits for the approver; removing the hard cap is refused.</li><li><b>Security Admin</b> → System Settings → emergency stop, then Agent Registry, MCP Shield and Memory &amp; Migration.</li><li><b>Read-only Auditor</b> → Audit Trail → verify the signed event chain.</li></ol></div>`;
 
 function rep(src, from, to, expected) {
   const n = src.split(from).length - 1;
@@ -24,21 +26,18 @@ app = rep(app, 'sessionStorage.', 'SAFE_SESSION.', 3);
 app = rep(app, "'#'+route", "'#'+(route==='settings'?'system':route)", 1);
 app = rep(app, 'location.hash.slice(1)', 'ROUTE_FROM_HASH()', 2);
 // 4. Copy for a browser-only edition, a guided path for first-time viewers, and a reset control.
-app = rep(app, '<div class="page-eyebrow">LOCAL SANDBOX / v0.1</div>', '<div class="page-eyebrow">BROWSER SANDBOX / v0.1.1</div>', 1);
+app = rep(app, '<div class="page-eyebrow">LOCAL SANDBOX / v0.1</div>', '<div class="lang-row">${btn(GEBRID_LANG_LABEL(),\'toggle-lang\',\'\',\'outline small\')}</div><div class="page-eyebrow">BROWSER SANDBOX / v0.1.1</div>', 1);
 app = rep(app, '<div class="hint orange">Demo accounts and synthetic data only. Do not expose this server on a public network or store production secrets.</div>',
-  `<div class="tour"><div class="tour-title">Five-minute walkthrough</div><ol>
-  <li><b>Agent Operator</b> → Invoice Control Lab → submit all five invoices. One drafts, one waits for approval, three are blocked.</li>
-  <li><b>Finance Approver</b> → Approvals → approve INV-1002. Policy, tool and budget are rechecked first.</li>
-  <li><b>Security Admin</b> → Agent Firewall → raise the approval threshold. The change waits for the approver; removing the hard cap is refused.</li>
-  <li><b>Security Admin</b> → System Settings → emergency stop, then Agent Registry, MCP Shield and Memory &amp; Migration.</li>
-  <li><b>Read-only Auditor</b> → Audit Trail → verify the signed event chain.</li></ol></div>
-  <div class="hint">Everything runs inside your browser: synthetic data, demo identities, no network calls, no payments, no AI model calls. Your sandbox is private to this browser; use Reset demo to start over.</div>`, 1);
-app = rep(app, "${btn('Refresh','refresh','','outline')}", "${btn('Reset demo','reset-demo','','ghost')}${btn('Refresh','refresh','','outline')}", 1);
+  `<div class="hint">Everything runs inside your browser: synthetic data, demo identities, no network calls, no payments, no AI model calls. Your sandbox is private to this browser; use Reset demo to start over.</div>`, 1);
+app = rep(app, "${btn('Refresh','refresh','','outline')}", "${btn(GEBRID_LANG_LABEL(),'toggle-lang','','outline')}${btn('Reset demo','reset-demo','','ghost')}${btn('Refresh','refresh','','outline')}", 1);
+app = rep(app, "if(action==='logout'){", "if(action==='toggle-lang'){GEBRID_TOGGLE_LANG();closeDialog();render();return;}\n  if(action==='logout'){", 1);
+// 5. Dates follow the interface language.
+app = rep(app, "toLocaleString('en-GB'", "toLocaleString(GebridI18n.lang==='ru'?'ru-RU':'en-GB'", 1);
 app = rep(app, "if(action==='refresh'){",
   "if(action==='reset-demo'){if(el.dataset.armed!=='1'){el.dataset.armed='1';el.textContent='Click again to reset';setTimeout(()=>{if(el.isConnected){el.dataset.armed='';el.textContent='Reset demo';}},4000);return;}"
   + "await run(async()=>{GEBRID_RESET();state.data={};await signout(false);notify('Demo data reset to the initial state');});return;}\n  if(action==='refresh'){", 1);
 app = rep(app, "<button type=\"submit\" class=\"btn primary full mt24\">Sign in to GEBRID →</button></form>",
-  "<button type=\"submit\" class=\"btn primary full mt24\">Sign in to GEBRID →</button></form><button type=\"button\" class=\"btn ghost full mt16\" data-action=\"reset-demo\">Reset demo</button>", 1);
+  "<button type=\"submit\" class=\"btn primary full mt24\">Sign in to GEBRID →</button></form><button type=\"button\" class=\"btn ghost full mt16\" data-action=\"reset-demo\">Reset demo</button>" + TOUR, 1);
 
 css += `
 :root{color-scheme:dark}
@@ -47,6 +46,7 @@ html,body{background:var(--bg)}
 .tour-title{font-size:10px;font-weight:850;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);margin-bottom:6px}
 .tour ol{margin:0;padding-left:18px;display:grid;gap:6px}.tour b{color:#e9fffb}
 .login-box .hint{margin-top:14px}
+.lang-row{display:flex;justify-content:flex-end;margin-bottom:18px}
 :focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 `;
@@ -63,6 +63,12 @@ const glue = `
   window.SAFE_SESSION={getItem:function(k){try{var v=window.sessionStorage.getItem(k);return v===null?(smem[k]||null):v;}catch(e){return smem[k]||null;}},
     setItem:function(k,v){smem[k]=v;try{window.sessionStorage.setItem(k,v);}catch(e){}},
     removeItem:function(k){delete smem[k];try{window.sessionStorage.removeItem(k);}catch(e){}}};
+  var LKEY='gebrid-lang', saved=store.get(LKEY);
+  var nav=(navigator.languages&&navigator.languages[0])||navigator.language||'';
+  window.GebridI18n.start(document);
+  window.GebridI18n.setLang(saved||(/^ru\\b/i.test(nav)?'ru':'en'),document);
+  window.GEBRID_LANG_LABEL=function(){return window.GebridI18n.lang==='ru'?'English':'Русский';};
+  window.GEBRID_TOGGLE_LANG=function(){var l=window.GebridI18n.lang==='ru'?'en':'ru';store.set(LKEY,l);window.GebridI18n.setLang(l,document);};
   window.ROUTE_FROM_HASH=function(){var h=(location.hash||'').slice(1);if(h==='system')return 'settings';
     var known=['overview','agents','firewall','guardian','invoices','tools','approvals','workflows','continuity','audit'];return known.indexOf(h)>=0?h:'';};
 })();`;
@@ -79,6 +85,9 @@ ${css}
 <div id="dialog-root"></div>
 <script>
 ${backend}
+</script>
+<script>
+${i18n}
 </script>
 <script>${glue}</script>
 <script>
