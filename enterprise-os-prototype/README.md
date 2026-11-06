@@ -32,7 +32,7 @@ docker compose up --build
 
 | Роль | Логин | Пароль | Действия |
 |---|---|---|---|
-| Security Admin | `admin@gebrid.local` | `SecurityLead!2026` | Политики, инструменты, агенты, snapshots, migration, emergency stop, аудит |
+| Security Admin | `admin@gebrid.local` | `SecurityLead!2026` | Политики, инструменты, агенты, snapshots, migration, emergency stop, аудит. **Не может** подавать запросы на исполнение; ослабление политики уходит на одобрение Finance Approver |
 | Operator | `operator@gebrid.local` | `OperatorDemo!2026` | Создание запросов, финансовые сценарии, workflow, Guardian-тесты |
 | Finance Approver | `finance@gebrid.local` | `FinanceApprove!2026` | Одобрение и отклонение запросов; не может самостоятельно создавать запросы |
 | Auditor | `auditor@gebrid.local` | `AuditRead!2026` | Только чтение audit и контрольных сумм snapshots |
@@ -65,6 +65,7 @@ docker compose up --build
 | Guardian Policy | Детерминированные сигнатуры suspicious input, ролевые и финансовые политики | Локально работает |
 | Guardian AI / dual LLM | **Нет реальных вызовов LLM и независимого AI-рецензента** | Не реализовано |
 | Approval Gate | Separate finance-approver, reject/approve, recheck policy version and limits | Локально работает |
+| Policy change control | Ужесточение применяется сразу; ослабление (effect, лимиты, порог, новые получатели, включение) — только после одобрения approver, с проверкой версии; для денежных действий hard cap и allowlist обязательны | Локально работает |
 | Continuity Vault | JSON snapshots, HMAC integrity, проверка перед migration | Локально работает |
 | Migration Guard | Переход между **симулированными адаптерами**, scope subset, неизменность ID и бюджетов | Частично, симуляция |
 | Agent Orchestrator | 2 последовательных workflow на фиксированных шаблонах | Локально работает |
@@ -129,7 +130,7 @@ node --check frontend/app.js
 node tests/ui_smoke.cjs
 ```
 
-**На момент сборки:** 22 API-теста и 11 offline smoke-checks интерфейсных разделов. Доступ к браузеру Chromium в среде сборки блокируется системной политикой URLBlocklist, поэтому полноценный headless E2E просмотр UI **не выполнен**; это ограничение верификации, а не подтверждение его прохождения. Клиентский JavaScript проверен синтаксически и на выполнение рендер-функций.
+**На момент v0.1.1:** 30 API-тестов и 11 offline smoke-checks интерфейсных разделов плюс проверка очереди изменений политик. Отдельно выполнен ручной headless-прогон Chromium (вход, разделы, ослабление политики admin → одобрение approver → исполнение operator) без ошибок JavaScript; в репозитории он не автоматизирован.
 
 ## Безопасность и ограничения
 

@@ -34,6 +34,10 @@ python -m uvicorn gebrid.app:app --host 127.0.0.1 --port 8000
 ## 3. Проверка оперативной безопасности
 
 1. Войти как Admin, зайти в **Agent Firewall**, изменить правило `finance-draft`. Согласование, созданное до изменения, не должно пройти после него (`STALE_POLICY`).
+   - Ужесточение (например, `max_amount` 12000) применяется сразу.
+   - Ослабление (например, `approval_above` 20000) не применяется: оно появляется в **Approvals → Policy change queue** и вступает в силу только после `Approve` под **Finance Approver**.
+   - Убрать hard cap или очистить allowlist у `finance-draft` / `procurement-create` нельзя: HTTP 422.
+   - Admin не может нажать `Submit draft` и запускать workflow: запросы подаёт только Operator.
 2. В **MCP Shield** поставить `erp-sandbox → disabled`. `INV-1001` (если еще не обработан) блокируется.
 3. В **Agent Registry** остановить `finance-agent`. Новый invoice draft блокируется до возобновления.
 4. В **System Settings** включить Global Emergency Stop. Все новые запросы блокируются; можно вернуть режим назад.

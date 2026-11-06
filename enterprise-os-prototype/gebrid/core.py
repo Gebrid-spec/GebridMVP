@@ -252,9 +252,8 @@ def policy_decision(c, request):
 def execute_sandbox(c, request):
     # The only supported execution side effect is writing local synthetic records.
     action = request['action']
+    # Authorization (including the mandatory purchase amount) is decided only in policy_decision.
     result = {'mode': 'SIMULATED', 'external_calls': 0, 'action': action, 'at': now()}
-    if action == 'purchase.create' and amount is None:
-        return deny('Purchase amount is required to enforce hard limits and budget', policy, guardian)
     if action == 'invoice.draft':
         invoice = db.one(c, 'SELECT * FROM invoices WHERE id=?', (request['resource_id'],))
         draft_id = 'DR-' + identifier()[:10].upper()
@@ -280,7 +279,9 @@ def execute_sandbox(c, request):
 
 
 def submit_action(c, user, request):
-    require_role(user, 'admin', 'operator')
+    # Segregation of duties: whoever can change policies (admin) must not also be able to
+    # propose actions under them, or a single person could relax a rule and then use it.
+    require_role(user, 'operator')
     accepted = {key: request.get(key) for key in ['agent_id', 'action', 'tool_id', 'resource_id', 'recipient', 'amount', 'input_text']}
     accepted['input_text'] = accepted.get('input_text') or ''
     fingerprint = hashlib.sha256(jdump(accepted).encode()).hexdigest()
@@ -352,6 +353,139 @@ def approve_action(c, user, action_id, approve, reason=''):
     append_audit(c, 'approval.'+status.lower(), user['id'], action_id,
                  {'status':status,'reason':message,'requester':row['proposer_id']})
     return public_action(db.one(c, 'SELECT * FROM action_requests WHERE id=?',(action_id,)))
+
+
+# Actions that move (simulated) money. A hard cap and a recipient allowlist are mandatory for them.
+MONEY_ACTIONS = {'invoice.draft', 'purchase.create'}
+EFFECT_STRICTNESS = {'allow': 0, 'approval': 1, 'deny': 2}
+POLICY_FIELDS = ('effect', 'max_amount', 'approval_above', 'enabled', 'allowed_recipients')
+
+
+def _limit(value):
+    return None if value is None else Decimal(str(value))
+
+
+def policy_view(policy):
+    """Policy row in API field terms (allowed_recipients as a list, enabled as bool)."""
+    return {'effect': policy['effect'], 'max_amount': policy['max_amount'], 'approval_above': policy['approval_above'],
+            'enabled': bool(policy['enabled']), 'allowed_recipients': jload(policy['allowed_recipients_json'], [])}
+
+
+def policy_weakening(current, changes):
+    """Return the reasons a change relaxes a control; empty list means the change is neutral or stricter.
+
+    `current` and `changes` use policy_view() field names. Fields equal to the current value are ignored,
+    so a UI that always sends the full form does not trigger four-eyes review on its own.
+    """
+    after = {**current, **changes}
+    reasons = []
+    if EFFECT_STRICTNESS[after['effect']] < EFFECT_STRICTNESS[current['effect']]:
+        reasons.append(f"effect relaxed: {current['effect']} -> {after['effect']}")
+    if after['enabled'] and not current['enabled'] and after['effect'] != 'deny':
+        reasons.append('policy enabled (grants an allow/approval path)')
+    for field in ('max_amount', 'approval_above'):
+        old, new = _limit(current[field]), _limit(after[field])
+        if old is not None and (new is None or new > old):
+            reasons.append(f'{field} relaxed: {current[field]} -> {after[field]}')
+    old_r, new_r = set(current['allowed_recipients']), set(after['allowed_recipients'])
+    if old_r and not new_r:
+        reasons.append('recipient allowlist removed')
+    elif new_r - old_r:
+        reasons.append('recipients added: ' + ', '.join(sorted(new_r - old_r)))
+    return reasons
+
+
+def validate_policy_result(policy, changes):
+    after = {**policy_view(policy), **changes}
+    if policy['action'] in MONEY_ACTIONS:
+        if after['max_amount'] is None:
+            raise HTTPException(422, detail='A hard amount cap is mandatory for money-moving actions')
+        if not after['allowed_recipients']:
+            raise HTTPException(422, detail='A recipient allowlist is mandatory for money-moving actions')
+
+
+def _apply_policy_change(c, policy, changes, actor, audit_extra):
+    updates, args = [], []
+    for field in POLICY_FIELDS:
+        if field not in changes:
+            continue
+        value = changes[field]
+        if field == 'enabled':
+            value = int(value)
+        if field == 'allowed_recipients':
+            field, value = 'allowed_recipients_json', jdump(value)
+        updates.append(field + '=?')
+        args.append(value)
+    c.execute('UPDATE policies SET ' + ','.join(updates) + ',version=version+1 WHERE id=? AND version=?',
+              (*args, policy['id'], policy['version']))
+    new_version = policy['version'] + 1
+    append_audit(c, 'policy.updated', actor, policy['id'],
+                 {'changes': sorted(changes), 'new_version': new_version, **audit_extra})
+    return new_version
+
+
+def propose_policy_change(c, user, policy_id, changes):
+    """Stricter or neutral changes apply at once; relaxing changes wait for an independent approver."""
+    require_role(user, 'admin')
+    policy = db.one(c, 'SELECT * FROM policies WHERE id=?', (policy_id,))
+    if not policy:
+        raise HTTPException(404, detail='Policy not found')
+    current = policy_view(policy)
+    same = lambda f, v: (set(v) == set(current[f]) if f == 'allowed_recipients'
+                         else _limit(v) == _limit(current[f]) if f in ('max_amount', 'approval_above')
+                         else v == current[f])
+    # Keep only real differences, so the approver reviews the actual diff and a re-saved form is a no-op.
+    changes = {f: v for f, v in changes.items() if not same(f, v)}
+    if not changes:
+        return {'ok': True, 'status': 'UNCHANGED', 'id': policy_id, 'new_version': policy['version']}
+    validate_policy_result(policy, changes)
+    weakening = policy_weakening(current, changes)
+    if not weakening:
+        version = _apply_policy_change(c, policy, changes, user['id'], {'review': 'not required (stricter or neutral)'})
+        return {'ok': True, 'status': 'APPLIED', 'id': policy_id, 'new_version': version}
+    change_id = 'PC-' + identifier().upper()
+    c.execute('''INSERT INTO policy_changes(id,policy_id,proposer_id,base_version,changes_json,weakening_json,status,created_at)
+                 VALUES(?,?,?,?,?,?,?,?)''',
+              (change_id, policy_id, user['id'], policy['version'], jdump(changes), jdump(weakening), 'PENDING_APPROVAL', now()))
+    append_audit(c, 'policy.change_proposed', user['id'], change_id,
+                 {'policy_id': policy_id, 'base_version': policy['version'], 'changes': changes, 'weakening': weakening})
+    return {'ok': True, 'status': 'PENDING_APPROVAL', 'id': policy_id, 'change_id': change_id,
+            'current_version': policy['version'], 'weakening': weakening}
+
+
+def public_policy_change(row):
+    return {**{k: row[k] for k in ('id', 'policy_id', 'proposer_id', 'base_version', 'status', 'reason',
+                                   'decided_by', 'decided_at', 'created_at')},
+            'changes': jload(row['changes_json'], {}), 'weakening': jload(row['weakening_json'], [])}
+
+
+def decide_policy_change(c, user, change_id, approve, reason=''):
+    require_role(user, 'approver')
+    row = db.one(c, 'SELECT * FROM policy_changes WHERE id=?', (change_id,))
+    if not row:
+        raise HTTPException(404, detail='Policy change not found')
+    if row['status'] != 'PENDING_APPROVAL':
+        raise HTTPException(409, detail='Policy change is not pending')
+    if row['proposer_id'] == user['id']:
+        raise HTTPException(403, detail='Proposer cannot approve own policy change')
+    policy = db.one(c, 'SELECT * FROM policies WHERE id=?', (row['policy_id'],))
+    changes = jload(row['changes_json'], {})
+    if not approve:
+        status, message = 'REJECTED', reason[:400] or 'Rejected by independent approver'
+    elif not policy or policy['version'] != row['base_version']:
+        # The approver reviewed a diff against a version that no longer exists.
+        status, message = 'STALE_POLICY', 'Policy changed since proposal; propose again against the current version'
+    else:
+        validate_policy_result(policy, changes)
+        _apply_policy_change(c, policy, changes, user['id'],
+                             {'review': 'four-eyes', 'change_id': change_id, 'proposer': row['proposer_id']})
+        status, message = 'APPLIED', reason[:400] or 'Approved by independent approver'
+    timestamp = now()
+    c.execute('UPDATE policy_changes SET status=?,reason=?,decided_by=?,decided_at=? WHERE id=?',
+              (status, message, user['id'], timestamp, change_id))
+    append_audit(c, 'policy.change_' + status.lower(), user['id'], change_id,
+                 {'policy_id': row['policy_id'], 'status': status, 'proposer': row['proposer_id']})
+    return public_policy_change(db.one(c, 'SELECT * FROM policy_changes WHERE id=?', (change_id,)))
 
 
 def make_snapshot(c, user, agent_id, payload):

@@ -30,4 +30,10 @@ for(const route of ['overview','agents','firewall','guardian','invoices','tools'
  assert(el('app').innerHTML.includes('<main'), 'Missing shell: '+route);
  console.log('rendered',route,el('app').innerHTML.length,'characters');
 }
-console.log('UI render smoke: 11 / 11 routes passed');
+vm.runInContext(`state.user={id:'finance',username:'finance@gebrid.local',role:'approver'};
+ state.data.policyChanges=[{id:'PC-1',policy_id:'finance-draft',proposer_id:'admin',base_version:1,status:'PENDING_APPROVAL',
+  changes:{approval_above:20000},weakening:['approval_above relaxed: 5000 -> 20000'],created_at:'2026-11-06T10:00:00Z'}];
+ state.route='approvals';render();`,context);
+assert(el('app').innerHTML.includes('Policy change queue'), 'Missing policy change queue');
+assert(el('app').innerHTML.includes('data-action="policy-approve"'), 'Approver cannot act on policy change');
+console.log('UI render smoke: 11 / 11 routes passed + policy change queue');

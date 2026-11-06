@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -185,33 +185,44 @@ def policies(user=Depends(current_user)):
 
 
 @app.patch('/api/policies/{policy_id}')
-def patch_policy(policy_id: str, body: PolicyPatch, user=Depends(current_user)):
+def patch_policy(policy_id: str, body: PolicyPatch, response: Response, user=Depends(current_user)):
     core.require_role(user,'admin')
     fields = body.model_fields_set
     if not fields:
         raise HTTPException(422, detail='Supply at least one field')
     if body.allowed_recipients is not None and any(not x.strip() or len(x)>120 for x in body.allowed_recipients):
         raise HTTPException(422, detail='Invalid recipient')
-    updates=[]; args=[]
-    for field in ['effect','max_amount','approval_above','enabled','allowed_recipients']:
+    changes = {}
+    for field in core.POLICY_FIELDS:
         if field in fields:
             val = getattr(body,field)
-            if field in ('effect','enabled') and val is None:
+            if field in ('effect','enabled','allowed_recipients') and val is None:
                 raise HTTPException(422, detail=field+' must not be null')
-            if field=='enabled': val = int(val)
-            if field=='allowed_recipients':
-                if val is None: raise HTTPException(422, detail='Recipients cannot be null')
-                val = core.jdump(val)
-                field='allowed_recipients_json'
-            updates.append(field+'=?')
-            args.append(val)
+            if field == 'allowed_recipients':
+                val = sorted({x.strip() for x in val})
+            changes[field] = val
     with db.transaction() as c:
-        current=db.one(c,'SELECT * FROM policies WHERE id=?',(policy_id,))
-        if not current: raise HTTPException(404,detail='Policy not found')
-        c.execute('UPDATE policies SET '+','.join(updates)+',version=version+1 WHERE id=?',(*args,policy_id))
-        core.append_audit(c,'policy.updated',user['id'],policy_id,
-                          {'changes':sorted(fields),'new_version':current['version']+1})
-    return {'ok':True,'id':policy_id,'new_version':current['version']+1}
+        result = core.propose_policy_change(c,user,policy_id,changes)
+    if result['status'] == 'PENDING_APPROVAL':
+        response.status_code = 202
+    return result
+
+
+@app.get('/api/policy-changes')
+def policy_changes(status: str | None = None, user=Depends(current_user)):
+    core.require_role(user,'admin','approver','auditor')
+    with db.transaction() as c:
+        if status:
+            rows = db.many(c,'SELECT * FROM policy_changes WHERE status=? ORDER BY created_at DESC LIMIT 100',(status,))
+        else:
+            rows = db.many(c,'SELECT * FROM policy_changes ORDER BY created_at DESC LIMIT 100')
+        return [core.public_policy_change(r) for r in rows]
+
+
+@app.post('/api/policy-changes/{change_id}/decision')
+def policy_change_decision(change_id: str, body: ApprovalRequest, user=Depends(current_user)):
+    with db.transaction() as c:
+        return core.decide_policy_change(c,user,change_id,body.approve,body.reason)
 
 
 @app.get('/api/tools')
@@ -337,7 +348,7 @@ def workflows(user=Depends(current_user)):
 
 @app.post('/api/workflows/run')
 def workflow_run(body:WorkflowRequest,user=Depends(current_user)):
-    core.require_role(user,'admin','operator')
+    core.require_role(user,'operator')
     with db.transaction() as c:
         return core.run_workflow(c,user,body.workflow,body.resource_id)
 

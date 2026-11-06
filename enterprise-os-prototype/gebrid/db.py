@@ -81,6 +81,13 @@ def init():
               enabled INT NOT NULL DEFAULT 1, version INT NOT NULL DEFAULT 1,
               UNIQUE(agent_id,action), FOREIGN KEY(agent_id) REFERENCES agents(id)
             );
+            CREATE TABLE IF NOT EXISTS policy_changes (
+              id TEXT PRIMARY KEY, policy_id TEXT NOT NULL, proposer_id TEXT NOT NULL,
+              base_version INT NOT NULL, changes_json TEXT NOT NULL, weakening_json TEXT NOT NULL,
+              status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '',
+              decided_by TEXT, decided_at TEXT, created_at TEXT NOT NULL,
+              FOREIGN KEY(policy_id) REFERENCES policies(id), FOREIGN KEY(proposer_id) REFERENCES users(id)
+            );
             CREATE TABLE IF NOT EXISTS tools (
               id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,
               status TEXT NOT NULL, allowed_actions_json TEXT NOT NULL,

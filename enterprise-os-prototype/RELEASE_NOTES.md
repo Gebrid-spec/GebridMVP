@@ -1,3 +1,18 @@
+# GEBRID Enterprise OS — release v0.1.1
+
+Дата: 2026-11-06
+
+- Fix: an allowed `purchase.create` crashed with HTTP 500 (`NameError` in `execute_sandbox`).
+- Segregation of duties: the admin role can no longer propose or execute actions or run workflows;
+  only the operator proposes. Dry-run `/api/actions/check` stays available to admins.
+- Policy change control: stricter changes apply at once; relaxing changes (effect, `max_amount`,
+  `approval_above`, added recipients, enabling) are queued and need an independent approver, with a
+  version check (`STALE_POLICY`) at approval time. Unchanged fields are ignored (`UNCHANGED`).
+- Money-moving actions (`invoice.draft`, `purchase.create`) must keep a hard cap and a non-empty
+  recipient allowlist (HTTP 422 otherwise).
+- New API: `GET /api/policy-changes`, `POST /api/policy-changes/{id}/decision`; UI queue in Approvals.
+- Tests: 30 backend tests (8 new), UI smoke extended.
+
 # GEBRID Enterprise OS — release v0.1.0
 
 Дата: 2026-11-05
