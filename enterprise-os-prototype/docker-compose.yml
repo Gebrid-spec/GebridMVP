@@ -1,0 +1,14 @@
+services:
+  gebrid-enterprise:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - gebrid_demo_data:/app/data
+    environment:
+      GEBRID_DEMO_MODE: "1"
+      GEBRID_DB_PATH: /app/data/gebrid.db
+      GEBRID_KEY_PATH: /app/data/.local_integrity_key
+    restart: unless-stopped
+volumes:
+  gebrid_demo_data:
