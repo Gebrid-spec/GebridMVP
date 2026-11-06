@@ -67,7 +67,8 @@ runs each, 3 invariants over 32,768 calls.
 - `docs/self-audit/` — one report per file, with findings, adversarial scenarios and known
   limitations.
 - `docs/adr/` — decisions with consequences: compiler and EVM target (0001), registry choice
-  (0002, reversed after review), attestation and block recording (0003), admin model (0004).
+  (0002, reversed after review), attestation and block recording (0003), admin model (0004),
+  ERC-7562 validation scope (0005, **proposed — needs an owner decision before step 2 code**).
 
 Security properties are demonstrated by executing the attack, not by describing it (invariant
 I-P2). Every adversarial claim in the reports names the test that proves it.

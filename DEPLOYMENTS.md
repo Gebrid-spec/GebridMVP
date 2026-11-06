@@ -23,10 +23,40 @@ Blocked on the Base Sepolia deployment and on the external audit (§0.2).
 
 ## Reference addresses
 
+### ERC-4337 EntryPoint
+
+Required by master prompt §0.1 to be fixed here with a source. **The version is an open owner
+decision (ADR-0005, O-1)** — the master prompt names v0.7, which is now two releases behind.
+
+| Version | Address | Status |
+| --- | --- | --- |
+| v0.7 (tag `v0.7.0`) | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | Named by the master prompt. Superseded as Latest; not marked deprecated by upstream. |
+| v0.8 (tag `v0.8.0`) | `0x4337084d9e255ff0702461cf8895ce9e3b5ff108` | — |
+| v0.9 (tag `v0.9.0`) | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` | **Latest** upstream. Release notes: ABI-compatible with v0.8 and v0.7, "does not require changes in Accounts and Paymasters". SenderCreator `0x0A630a99Df908A81115A3022927Be82f9299987e`. |
+
+**Source:** `github.com/eth-infinitism/account-abstraction/releases`, section "Release v0.7",
+subheading "EntryPoint 0.7 address" (release commit `7af70c8993a6f42973f520ae0752386a5032abe7`).
+The v0.8 address is corroborated by the repository README ("Entrypoint Deployment"); the v0.7 and
+v0.9 addresses come from the releases page only.
+
+**Not yet verified, and must be before any deployment:**
+
+- **Presence on Base.** Neither source states that the chosen EntryPoint is deployed on Base
+  mainnet (8453) or Base Sepolia (84532), nor that it is a deterministic single-address deployment
+  across chains. The README describes a per-network `hardhat deploy`, which is not a CREATE2
+  guarantee. Verify with `cast code <entrypoint> --rpc-url base_sepolia` before scheduling a run.
+  This could not be checked from the build environment: Base RPC is blocked by the egress policy.
+- **Address checksum.** Copied verbatim from the source page; re-derive the EIP-55 checksum before
+  putting it in a deploy script.
+- **On-chain time-range enforcement** (ADR-0005, O-3). Read it off the EntryPoint source of the
+  chosen version; the ERC-4337 text describes the `validAfter`/`validUntil` check as bundler-side.
+
+### ERC-6551
+
 | Item | Value | Source |
 | --- | --- | --- |
-| ERC-4337 EntryPoint v0.7 | **TO BE FIXED** — required by master prompt §0.1 with a cited source. | Not yet needed: `validateUserOp` is step 2 of queue 0.1 and is not in this codebase. Must be recorded here before step 2 begins. |
-| ERC-6551 canonical registry | `0x000000006551c19487814612e58FE06813775758` | ERC-6551. **This is what the deployment binds** — ADR-0002. Its presence and conformance are re-proved by `DeployCore` at every deployment; they were never verified from the build environment, where Base RPC is blocked by egress policy. |
+| Canonical registry | `0x000000006551c19487814612e58FE06813775758` | ERC-6551. **This is what the deployment binds** — ADR-0002. Presence and conformance are re-proved by `DeployCore` at every deployment; they were never verified from the build environment, where Base RPC is blocked by egress policy. |
+
 
 ## Required role split before mainnet use
 
